@@ -17,7 +17,12 @@ int sat = 0;
 
 float myLatVal = 0, myLonVal = 0;
 //GPS  vars ---------------------
+char* GPSPacketByteValue;
 
+
+GPSPacket newPacket;
+
+//TYPEDEFS ----------------------
 
 
 void setup(){
@@ -42,7 +47,29 @@ void loop(){
   }else{
     Serial.print("Hmm.. Not quite there \n");
   }
+    if((boolean)myLatVal * myLonVal){ // if (Latitude != 0.0f && Longitude != 0.0f) 
+    newPacket.Latitude = myLatVal;
+    newPacket.Longitude = myLonVal;
+    newPacket.magicNumber = 0x7E57; 
+    
+    //Malloc
+    GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
+//    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
+    GPSPacketByteValue = (char*) &newPacket;
+    Serial.println(GPSPacketByteValue);
+    decodr(GPSPacketByteValue);
+    
+  }
 }
+void decodr(char* inputChar){
+   GPSPacket* decodingTemplate;
+   decodingTemplate = (GPSPacket*) inputChar;
+   Serial.println(decodingTemplate->magicNumber); 
+  
+  
+  
+}
+
 boolean getGPS(int timeOutTime){
   float timeMillis = millis();
   gps.flush();
