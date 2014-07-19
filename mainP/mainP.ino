@@ -3,8 +3,10 @@
 #define rxPin 9      //rx pin in GPS connection
 
 SoftwareSerial gps = SoftwareSerial(rxPin, txPin);
-///// ^GPS vXbee
+//Xbee vars ---------------------
+String ATString;
 
+//Xbee vars----------------------
 //GPS  vars ---------------------
 byte byteGPS = 0;  
 int i = 0;
@@ -13,17 +15,28 @@ char dataGPG[100]="";
 char *pch;
 char *GGA[15];
 int sat = 0;
-
-
+boolean GPSFlag;
+uint32_t myHAddress;
+uint32_t myLAddress;
 float myLatVal = 0, myLonVal = 0;
 //GPS  vars ---------------------
 char* GPSPacketByteValue;
+//TYPEDEFS ---------------------- 
 
+typedef struct GPSPacket{  //defines a structure 
+  float Latitude;
+  float Longitude;
+  uint32_t magicNumber;
+  uint32_t sourceHAddress; //ATSH
+  uint32_t sourceLAddress; //ATSL
+}GPSPacket;
+//TYPEDEFS ----------------------
+
+//Create objects ----------------
 
 GPSPacket newPacket;
 
-//TYPEDEFS ----------------------
-
+//Create objects ----------------
 
 void setup(){
   Serial.begin(9600);
@@ -38,28 +51,34 @@ void setup(){
 
 void loop(){
   delay(1000);
-  if(getGPS(30000)){
+  /*if(getGPS(30000)){
     Serial.print(myLatVal);
     Serial.print("...");
     Serial.print(myLonVal);
     Serial.print("\n");
-
-  }else{
-    Serial.print("Hmm.. Not quite there \n");
-  }
-    if((boolean)myLatVal * myLonVal){ // if (Latitude != 0.0f && Longitude != 0.0f) 
+  }*/
+    if(myHAddress == 0 || myLAddress ==0){ //ifndef my addresses; define
+      enterAT(3);
+      myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
+      Serial.println(myHAddress);
+      myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16);
+      Serial.println(myLAddress);
+      sendAT("ATCN\r\n", 3);
+    }else{
+      digitalWrite(13, HIGH); 
+    }
+    if(((boolean)myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
     newPacket.Latitude = myLatVal;
     newPacket.Longitude = myLonVal;
-    newPacket.magicNumber = 0x7E57; 
-    
+    newPacket.magicNumber = 0x7E57;
     //Malloc
     GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
 //    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
     GPSPacketByteValue = (char*) &newPacket;
-    Serial.println(GPSPacketByteValue);
-    decodr(GPSPacketByteValue);
-    
-  }
+    Serial.println(GPSPacketByteValue);    
+    } else{
+      getGPS(30000);       
+    }
 }
 void decodr(char* inputChar){
    GPSPacket* decodingTemplate;
@@ -103,7 +122,7 @@ boolean getGPS(int timeOutTime){
 
   dataGPG[i]= '\0';
   // Call to the function that manipulates our string
-  Serial.print("\n");
+  //Serial.print("\n");
   i=0;
   memset(GGA, 0, sizeof(GGA));          // Remove previous readings
 
@@ -138,8 +157,8 @@ boolean getGPS(int timeOutTime){
   }else{
     myLonVal = -1 * rawLon;
   }
-  printFloat(myLatVal);
-  printFloat(myLonVal);
+  //printFloat(myLatVal);
+  //printFloat(myLonVal);
 }
 
 
@@ -175,30 +194,55 @@ void printFloat ( float numToPrint){
   int bigDecimal = 10000 * (numToPrint - floor(numToPrint));
   Serial.println (bigDecimal);
 }
+String readXbee(int timeoutTime){
+  String finalString = "";
+  float startTime = millis();
+  while (!Serial.available()) {
+    if(millis()-startTime > timeoutTime){
+      return "";
+    }
+  }
+  /*while (Serial.available()){
+    finalString = finalString + (char)Serial.read();
+  }*/
+      float firstStreamTime;
 
-/* Obsolete
- void string()
- {
- i=0;
- memset(GGA, 0, sizeof(GGA));          // Remove previous readings
- 
- pch = strtok (dataGPG,",");
- 
- if (strcmp(pch,"$GPGGA")==0)
- {
- while (pch != NULL)
- {
- pch = strtok (NULL, ",");
- GGA[i]=pch;    
- i++;
- } 
- 
- for(int i = 0; i < 15; ++i){
- Serial.println(GGA[i]);
- }
- Serial.println("---------------");
- }
- }*/
+  do{
+    finalString = finalString + (char) Serial.read();
+    firstStreamTime = millis();
+    while ( millis() - firstStreamTime < 100 & ! Serial.available());
+  }while(millis()-firstStreamTime<100);
+  delay(1000);
+  Serial.println(finalString);
+  return finalString;
+}
+boolean enterAT(int maxIterations){
+  do{
+    maxIterations--;
+    delay(2000);
+    Serial.print("+++");
+    String gotString = readXbee(2000);
+    if(strcmp (gotString.c_str(), "OK\r") == 0/*strlen(gotString.c_str()) > 0*/ ){
+      //digitalWrite(13, HIGH);
+      return true;
+    }
+  }
+  while(maxIterations > 0 );
+  return false;
+}
+String sendAT(String whatToSend, int maxIterations){
+  Serial.flush();
+  Serial.print(whatToSend);
+  do{
+    maxIterations--;
+    String gotString = readXbee(2000);
+    if(strlen(gotString.c_str())>0){
+      return gotString;
+    }
+  }while(maxIterations>0);
+  Serial.println("ERROR!! TIMED OUT!"); // This should not display, else there is an error
+  return false;  
+}
 
 
 
