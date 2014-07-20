@@ -1,4 +1,11 @@
 #include <SoftwareSerial.h>
+#include <math.h>
+//Mathematical Defines vv
+#define pi 3.14159265358979
+#define dlat (pi*(Lat2-Lat1)/180)
+#define dlon (pi*(Lon2-Lon1)/180)
+#define earthRadius 6371000
+//Mathematical Defines ^^
 #define txPin 8      //tx pin in GPS connection
 #define rxPin 9      //rx pin in GPS connection
 
@@ -51,12 +58,12 @@ void setup(){
 
 void loop(){
   delay(1000);
-  /*if(getGPS(30000)){
-    Serial.print(myLatVal);
-    Serial.print("...");
-    Serial.print(myLonVal);
-    Serial.print("\n");
-  }*/
+  //if(getGPS(30000)){
+  //  Serial.print(myLatVal);
+  //  Serial.print("...");
+  //  Serial.print(myLonVal);
+  //  Serial.print("\n");
+  //}
     if(myHAddress == 0 || myLAddress ==0){ //ifndef my addresses; define
       enterAT(3);
       myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
@@ -71,19 +78,26 @@ void loop(){
     newPacket.Latitude = myLatVal;
     newPacket.Longitude = myLonVal;
     newPacket.magicNumber = 0x7E57;
+    newPacket.sourceHAddress = myHAddress;
+    newPacket.sourceLAddress = myLAddress;
     //Malloc
-    GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
+    //GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
 //    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
     GPSPacketByteValue = (char*) &newPacket;
     Serial.println(GPSPacketByteValue);    
+    decodr(GPSPacketByteValue);
     } else{
       getGPS(30000);       
     }
+    debug("Hello, World");
+    
 }
 void decodr(char* inputChar){
    GPSPacket* decodingTemplate;
    decodingTemplate = (GPSPacket*) inputChar;
    Serial.println(decodingTemplate->magicNumber); 
+   Serial.println(decodingTemplate->Latitude);
+   Serial.println(decodingTemplate->Longitude);
   
   
   
@@ -194,7 +208,7 @@ void printFloat ( float numToPrint){
   int bigDecimal = 10000 * (numToPrint - floor(numToPrint));
   Serial.println (bigDecimal);
 }
-String readXbee(int timeoutTime){
+String readXbee(int timeoutTime){   
   String finalString = "";
   float startTime = millis();
   while (!Serial.available()) {
@@ -243,6 +257,32 @@ String sendAT(String whatToSend, int maxIterations){
   Serial.println("ERROR!! TIMED OUT!"); // This should not display, else there is an error
   return false;  
 }
-
-
+float distance(float Lat1, float Lon1, float Lat2, float Lon2){
+  float a = (sin(dlat/2)) * (sin(dlat/2)) + cos(pi*Lat1/180) * cos(pi*Lat2/180) * (sin(dlon/2)) * (sin(dlon/2)) ;
+  float c = 2 * atan2( sqrt(a), sqrt(1-a) );
+  return (earthRadius * c);
+  
+} 
+void debug(String whatToSend){
+  enterAT(3);
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+  Serial.println( whatToSend);
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATCN\r\n",3);
+}
+void debug(float whatToSend){
+  enterAT(3);
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+  Serial.println( whatToSend);
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATCN\r\n",3);
+}
 
