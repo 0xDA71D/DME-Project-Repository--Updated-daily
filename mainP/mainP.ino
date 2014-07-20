@@ -269,12 +269,14 @@ void debug(String whatToSend){
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
   sendAT("ATDLDEB6\r\n",3);
+  sendAT("ATCN\r\n",3);
   Serial.println( whatToSend);
+  enterAT(3);
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATCN\r\n",3);
 }
-void debug(float whatToSend){
+/*void debug(float whatToSend){
   enterAT(3);
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
@@ -284,5 +286,5 @@ void debug(float whatToSend){
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATCN\r\n",3);
-}
+}*/
 
