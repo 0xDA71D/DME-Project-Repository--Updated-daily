@@ -42,6 +42,7 @@ typedef struct GPSPacket{  //defines a structure
 //Create objects ----------------
 
 GPSPacket newPacket;
+GPSPacket* receivedPacket;
 
 //Create objects ----------------
 
@@ -54,10 +55,15 @@ void setup(){
   //xbee.end();
   pinMode(13, OUTPUT); //setup satellites signal
   digitalWrite(13, LOW);     // Turn off the led until a satellite signal
+  //init vvvv
+  enterAT(3);
+  sendAT("ATDH0\r\n",3);
+  sendAT("ATDL0\r\n",3);
+  sendAT("ATCN\r\n", 3);
 }
 
 void loop(){
-  delay(1000);
+/*  delay(1000);
   //if(getGPS(30000)){
   //  Serial.print(myLatVal);
   //  Serial.print("...");
@@ -85,11 +91,17 @@ void loop(){
 //    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
     GPSPacketByteValue = (char*) &newPacket;
     Serial.println(GPSPacketByteValue);    
-    decodr(GPSPacketByteValue);
+    //decodr(GPSPacketByteValue);
     } else{
       getGPS(30000);       
     }
-    debug("Hello, World");
+    if(Serial.available()){ //event void radio received 
+      String outputString = readXbee(1000);
+    //  receivedPacket = (GPSPacket*) outputString.c_str();
+    //  debug(distance(receivedPacket->Latitude, myLatVal, receivedPacket->Longitude, myLonVal));
+      debug(outputString);
+    }*/
+    Serial.println("spam");
     
 }
 void decodr(char* inputChar){
@@ -186,7 +198,7 @@ float parseDegree(char* inputString){
   //Serial.print (" | ");    For debug use
   //Serial.print(secondNum);
   //Serial.print("\n");
-  degree = floor(firstNum/ 100);
+  degree = floor(firstNum/ 100); 
   //Serial.println(degree);
   minute = firstNum - 100*degree;
   //Serial.println(minute);
@@ -226,15 +238,16 @@ String readXbee(int timeoutTime){
     firstStreamTime = millis();
     while ( millis() - firstStreamTime < 100 & ! Serial.available());
   }while(millis()-firstStreamTime<100);
-  delay(1000);
-  Serial.println(finalString);
+ // delay(1000);
+  //Serial.println(finalString);
   return finalString;
 }
 boolean enterAT(int maxIterations){
   do{
     maxIterations--;
-    delay(2000);
+    delay(1000);
     Serial.print("+++");
+    delay(1000);
     String gotString = readXbee(2000);
     if(strcmp (gotString.c_str(), "OK\r") == 0/*strlen(gotString.c_str()) > 0*/ ){
       //digitalWrite(13, HIGH);
@@ -245,7 +258,7 @@ boolean enterAT(int maxIterations){
   return false;
 }
 String sendAT(String whatToSend, int maxIterations){
-  Serial.flush();
+  //Serial.flush();
   Serial.print(whatToSend);
   do{
     maxIterations--;
@@ -274,17 +287,23 @@ void debug(String whatToSend){
   enterAT(3);
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
   sendAT("ATCN\r\n",3);
 }
-/*void debug(float whatToSend){
+void debug(float whatToSend){
   enterAT(3);
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
   sendAT("ATDLDEB6\r\n",3);
+  sendAT("ATCN\r\n",3);
   Serial.println( whatToSend);
+  enterAT(3);
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
   sendAT("ATCN\r\n",3);
-}*/
+}
 
