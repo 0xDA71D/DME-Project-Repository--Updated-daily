@@ -4,7 +4,7 @@
 #define pi 3.14159265358979
 #define dlat (pi*(Lat2-Lat1)/180)
 #define dlon (pi*(Lon2-Lon1)/180)
-#define earthRadius 6371000
+#define earthRadius 6371000 //meters
 //Mathematical Defines ^^
 #define txPin 8      //tx pin in GPS connection
 #define rxPin 9      //rx pin in GPS connection
@@ -22,7 +22,6 @@ char dataGPG[100]="";
 char *pch;
 char *GGA[15];
 int sat = 0;
-boolean GPSFlag;
 uint32_t myHAddress;
 uint32_t myLAddress;
 float myLatVal = 0, myLonVal = 0;
@@ -46,6 +45,14 @@ GPSPacket* receivedPacket;
 
 //Create objects ----------------
 
+//flags and timers vv
+#define GPS_TIME 60000000
+#define DEBUG_TIME 20000000
+boolean GPSFlag; //true if GPS received.
+uint32_t GPSTicker = 0;
+uint32_t debugTicker = 20000000;
+//flags and timers ^^
+
 void setup(){
   Serial.begin(9600);
   Serial.flush(); 
@@ -64,98 +71,42 @@ void setup(){
   sendAT("ATDH0\r\n",3);
   sendAT("ATDL0\r\n",3);
   sendAT("ATCN\r\n", 3);
+  while(!getSerialNumber()); //keep getting until it's set; constant value for the rest of the code. 
 }
 
 void loop(){
-  delay(1000);
-  //if(getGPS(30000)){
-  //  Serial.print(myLatVal);
-  //  Serial.print("...");
-  //  Serial.print(myLonVal);
-  //  Serial.print("\n");
-  //}
-    if(myHAddress == 0 || myLAddress ==0){ //ifndef my addresses; define
-      enterAT(3);
-      myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
-      Serial.println(myHAddress);                                               // Why do this for?
-      myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16);
-      Serial.println(myLAddress);                                              //  What, is it an antique radio?
-      sendAT("ATCN\r\n", 3);
-    }else{
-      digitalWrite(13, HIGH); 
-    }
-    if((boolean)(myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
-    newPacket.Latitude = myLatVal;
-    newPacket.Longitude = myLonVal;
-    newPacket.magicNumber = 0x7E57;
-    newPacket.sourceHAddress = myHAddress;
-    newPacket.sourceLAddress = myLAddress;
-    //Malloc
-    //GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
-//    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
-    GPSPacketByteValue = (char*) &newPacket;
-    Serial.println(GPSPacketByteValue);    
-    //decodr(GPSPacketByteValue);
-    } else{
-      getGPS(30000);       
-    }
-    if(Serial.available()){ //event void radio received 
-      String outputString = readXbee(1000);
-    //  receivedPacket = (GPSPacket*) outputString.c_str();
-    //  debug(distance(receivedPacket->Latitude, myLatVal, receivedPacket->Longitude, myLonVal));
-      debug(&outputString, myHAddress, myLAddress );
-    }    
-}
-void decodr(char* inputChar){
-   GPSPacket* decodingTemplate;
-   decodingTemplate = (GPSPacket*) inputChar; 
-   Serial.println(decodingTemplate->magicNumber); 
-   Serial.println(decodingTemplate->Latitude);
-   Serial.println(decodingTemplate->Longitude);
-  
-  
-  
-}
+  long nowMicro = micros();
 
+
+}
+//Main loop ^^
+
+//Functions to be called to do stuff vv
 boolean getGPS(int timeOutTime){
   float timeMillis = millis();
-  //gps.flush();
-  //Serial.flush();
-
-  // Prepare all for reading GPS Serial Port
   memset(dataGPG, 0, sizeof(dataGPG));    // Remove previous readings
   byteGPS = 0;                            // Remove data
   byteGPS = gps.read();                   // Read the byte that is in the GPS serial port
   delay(1000);
-
-  // Find the desired string
-  while(byteGPS != '$')
+  while(byteGPS != '$') //find the desired string to parse
   {
     byteGPS = gps.read();
     if((int) (millis()-timeMillis) >= timeOutTime){
       return false;
-      
     }
-  } 
-
+  }
   i=1;
   dataGPG[0] = '$';
-
   while(byteGPS != '*' )
   {
     byteGPS = gps.read();
     dataGPG[i]=byteGPS; 
     i++; 
   }
-
   dataGPG[i]= '\0';
-  // Call to the function that manipulates our string
-  //Serial.print("\n");
   i=0;
   memset(GGA, 0, sizeof(GGA));          // Remove previous readings
-
   pch = strtok (dataGPG,",");
-
   if (strcmp(pch,"$GPRMC")==0)
   {  
     while (pch != NULL)
@@ -167,29 +118,40 @@ boolean getGPS(int timeOutTime){
   }else{
     return false;
   }
-  //Serial.println(GGA[3]);
-  //Serial.println(GGA[3]);
-  //Serial.println(GGA[4]);
   float rawLat = parseDegree(GGA[2]);
   float rawLon = parseDegree(GGA[4]);
-  if(rawLat * rawLon == 0){
+  if(rawLat == 0 || rawLat == 0 || *GGA[1] == 'V' ){
   return false;
   }
-  if(*GGA[3] == 'N'){
-    myLatVal = rawLat;
-  }else{
-    myLatVal = -1 * rawLat;
+  if(*GGA[3] == 'S'){
+    rawLat = -1 * rawLat;
   }
-    if(*GGA[5] == 'E'){
-    myLonVal = rawLon;
-  }else{
-    myLonVal = -1 * rawLon;
+    if(*GGA[5] == 'W'){
+    rawLon = -1 * rawLon;
   }
-  //printFloat(myLatVal);
-  //printFloat(myLonVal);
+  //Reality Check
+  if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){return false;}
+  myLatVal = rawLat;
+  myLonVal = rawLon;
+  return true;
 }
+boolean getSerialNumber(){
+   enterAT(3);
+   myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
+   Serial.println(myHAddress);                                          
+   myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16);
+   Serial.println(myLAddress);    
+   //confirmation step
+   if((uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16) !=myHAddress || (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16) != myLAddress){
+     return false;
+   }
+   Serial.print("ATCN\r\n");
+   digitalWrite(13, HIGH);
+   return true;  
+}
+//Functions to be called from main loop (WARNING: Only functions that are written in the main loop can be put here!!!!) ^^
 
-
+//utils vv
 float parseDegree(char* inputString){
   int firstNum,degree;
   long secondNum;
@@ -355,4 +317,34 @@ void debug(float whatToSend){
   sendAT("ATCN\r\n",3);
   digitalWrite(11, LOW);
 }
+void decodr(char* inputChar){
+   GPSPacket* decodingTemplate;
+   decodingTemplate = (GPSPacket*) inputChar; 
+   Serial.println(decodingTemplate->magicNumber); 
+   Serial.println(decodingTemplate->Latitude);
+   Serial.println(decodingTemplate->Longitude);
+}
 
+/*Dead code (used to be in loop, now here for reference 
+    if((boolean)(myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
+    newPacket.Latitude = myLatVal;
+    newPacket.Longitude = myLonVal;
+    newPacket.magicNumber = 0x7E57;
+    newPacket.sourceHAddress = myHAddress;
+    newPacket.sourceLAddress = myLAddress;
+    //Malloc
+    //GPSPacketByteValue = (char*) malloc(sizeof(newPacket));
+//    memcpy(GPSPacketByteValue, &newPacket, sizeof(newPacket));
+    GPSPacketByteValue = (char*) &newPacket;
+    Serial.println(GPSPacketByteValue);    
+    //decodr(GPSPacketByteValue);
+    } else{
+      getGPS(30000);       
+    }
+    if(Serial.available()){ //event void radio received 
+      String outputString = readXbee(1000);
+    //  receivedPacket = (GPSPacket*) outputString.c_str();
+    //  debug(distance(receivedPacket->Latitude, myLatVal, receivedPacket->Longitude, myLonVal));
+      debug(&outputString, myHAddress, myLAddress );
+    }    
+*/
