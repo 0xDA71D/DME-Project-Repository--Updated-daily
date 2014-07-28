@@ -53,8 +53,12 @@ void setup(){
   gps.flush();
   //xbee.begin(9600);
   //xbee.end();
-  pinMode(13, OUTPUT); //setup satellites signal
-  digitalWrite(13, LOW);     // Turn off the led until a satellite signal
+  pinMode(13, OUTPUT); //setup zigbee signal
+  digitalWrite(13, LOW);     // Turn off the led until a zigbee signal
+  pinMode(11, OUTPUT);
+  digitalWrite(11, LOW); //basestation led
+  pinMode(12, OUTPUT);
+  digitalWrite(12, LOW); //Permanently like this
   //init vvvv
   enterAT(3);
   sendAT("ATDH0\r\n",3);
@@ -63,7 +67,7 @@ void setup(){
 }
 
 void loop(){
-/*  delay(1000);
+  delay(1000);
   //if(getGPS(30000)){
   //  Serial.print(myLatVal);
   //  Serial.print("...");
@@ -73,14 +77,14 @@ void loop(){
     if(myHAddress == 0 || myLAddress ==0){ //ifndef my addresses; define
       enterAT(3);
       myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
-      Serial.println(myHAddress);
+      Serial.println(myHAddress);                                               // Why do this for?
       myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16);
-      Serial.println(myLAddress);
+      Serial.println(myLAddress);                                              //  What, is it an antique radio?
       sendAT("ATCN\r\n", 3);
     }else{
       digitalWrite(13, HIGH); 
     }
-    if(((boolean)myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
+    if((boolean)(myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
     newPacket.Latitude = myLatVal;
     newPacket.Longitude = myLonVal;
     newPacket.magicNumber = 0x7E57;
@@ -99,14 +103,12 @@ void loop(){
       String outputString = readXbee(1000);
     //  receivedPacket = (GPSPacket*) outputString.c_str();
     //  debug(distance(receivedPacket->Latitude, myLatVal, receivedPacket->Longitude, myLonVal));
-      debug(outputString);
-    }*/
-    Serial.println("spam");
-    
+      debug(&outputString, myHAddress, myLAddress );
+    }    
 }
 void decodr(char* inputChar){
    GPSPacket* decodingTemplate;
-   decodingTemplate = (GPSPacket*) inputChar;
+   decodingTemplate = (GPSPacket*) inputChar; 
    Serial.println(decodingTemplate->magicNumber); 
    Serial.println(decodingTemplate->Latitude);
    Serial.println(decodingTemplate->Longitude);
@@ -117,8 +119,8 @@ void decodr(char* inputChar){
 
 boolean getGPS(int timeOutTime){
   float timeMillis = millis();
-  gps.flush();
-  Serial.flush();
+  //gps.flush();
+  //Serial.flush();
 
   // Prepare all for reading GPS Serial Port
   memset(dataGPG, 0, sizeof(dataGPG));    // Remove previous readings
@@ -206,12 +208,12 @@ float parseDegree(char* inputString){
   //Serial.println(minute);
   return degree + (minute*0.0166666667);
 }
-void printFloat ( float numToPrint){
+/*void printFloat ( float numToPrint){
   char addChar;
   if(numToPrint < 0){
     addChar = '-';
   }else{
-    addChar = NULL;
+    addChar = NULL;                                                       // Antique
   }
   numToPrint = abs(numToPrint);
   Serial.print(addChar);
@@ -219,7 +221,7 @@ void printFloat ( float numToPrint){
   Serial.print(".");
   int bigDecimal = 10000 * (numToPrint - floor(numToPrint));
   Serial.println (bigDecimal);
-}
+}*/
 String readXbee(int timeoutTime){   
   String finalString = "";
   float startTime = millis();
@@ -236,8 +238,8 @@ String readXbee(int timeoutTime){
   do{
     finalString = finalString + (char) Serial.read();
     firstStreamTime = millis();
-    while ( millis() - firstStreamTime < 100 & ! Serial.available());
-  }while(millis()-firstStreamTime<100);
+    while ( ((millis() - firstStreamTime )< 5 )& ! Serial.available()); // changed stream time from 100 to 5; normally does not take that long. 1ms nominal.
+  }while((millis()-firstStreamTime)<5);
  // delay(1000);
   //Serial.println(finalString);
   return finalString;
@@ -245,7 +247,7 @@ String readXbee(int timeoutTime){
 boolean enterAT(int maxIterations){
   do{
     maxIterations--;
-    delay(1000);
+    delay(1100);
     Serial.print("+++");
     delay(1000);
     String gotString = readXbee(2000);
@@ -276,34 +278,81 @@ float distance(float Lat1, float Lon1, float Lat2, float Lon2){
   return (earthRadius * c);
   
 } 
-void debug(String whatToSend){
+void debug(String* whatToSend){
+  analogWrite(11, 8);
   enterAT(3);
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
   sendAT("ATDLDEB6\r\n",3);
+  digitalWrite(11, HIGH);
+
   sendAT("ATCN\r\n",3);
-  Serial.println( whatToSend);
+  Serial.println( *whatToSend);
+  analogWrite(11, 8);
   enterAT(3);
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
   sendAT("ATDL\r\n", 3);
   sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
+}
+void debug(float* whatToSend){
+  analogWrite(11, 8);
+  enterAT(3);
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+    digitalWrite(11, HIGH);
+
+  sendAT("ATCN\r\n",3);
+  Serial.println( *whatToSend);
+  analogWrite(11, 8);  enterAT(3);
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
+  sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
+}
+void debug(String* whatToSend, uint32_t Haddress, uint32_t Laddress){
+  analogWrite(11, 8);
+  enterAT(3);
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+    digitalWrite(11, HIGH);
+
+  sendAT("ATCN\r\n",3);
+  Serial.print( *whatToSend);Serial.print(" | "); Serial.print(Haddress);Serial.print(" | "); Serial.println(Laddress);
+  analogWrite(11, 8);  enterAT(3);
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
+  sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
 }
 void debug(float whatToSend){
+  analogWrite(11, 8);
   enterAT(3);
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
   sendAT("ATDLDEB6\r\n",3);
+    digitalWrite(11, HIGH);
+
   sendAT("ATCN\r\n",3);
-  Serial.println( whatToSend);
-  enterAT(3);
+  Serial.println(whatToSend);
+  analogWrite(11, 8);  enterAT(3);
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
   sendAT("ATDL\r\n", 3);
   sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
 }
 
