@@ -1,3 +1,5 @@
+#include <MemoryFree.h>
+
 #include <SoftwareSerial.h>
 #include <math.h>
 //Mathematical Defines vv
@@ -49,8 +51,9 @@ GPSPacket* receivedPacket;
 #define GPS_TIME 60000000
 #define DEBUG_TIME 20000000
 boolean GPSFlag; //true if GPS received.
-uint32_t GPSTicker = 0;
-uint32_t debugTicker = 20000000;
+boolean mustSendFlag;
+int32_t GPSTicker = 0;
+int32_t debugTicker = 20000000;
 //flags and timers ^^
 
 void setup(){
@@ -73,65 +76,92 @@ void setup(){
   sendAT("ATCN\r\n", 3);
   while(!getSerialNumber()); //keep getting until it's set; constant value for the rest of the code. 
 }
-
+String hey = "hey";
 void loop(){
-  long nowMicro = micros();
+  unsigned long nowMicro = micros();
+  ////////////////////////////////
+  if(GPSTicker < 0 ){
+    getGPS(3000);
+    Serial.println(myLatVal);
+    GPSTicker = GPS_TIME; 
+  }
+  ////////////////////////////////
+  if(debugTicker < 0){
+   debug(myLatVal);
+   debugTicker = DEBUG_TIME; 
+  }
 
-
+  ///////////////////////////////
+  if(Serial.available()){process();}
+  ///////////////////////////////
+  
+  uint32_t elapsedMicro = (uint32_t)(4294967295*((int)(micros()<nowMicro)) - (int32_t)nowMicro) + (int32_t)(micros());
+  GPSTicker = GPSTicker - elapsedMicro;
+  debugTicker = debugTicker - elapsedMicro;
 }
 //Main loop ^^
 
 //Functions to be called to do stuff vv
+boolean process(){
+  String got = readXbee(3);
+  //debug((GPSPacket*)got.c_str(), strlen(got.c_str()));
+  debug((char*)got.c_str()); 
+  
+  
+  
+  
+  
+}
 boolean getGPS(int timeOutTime){
-  float timeMillis = millis();
-  memset(dataGPG, 0, sizeof(dataGPG));    // Remove previous readings
-  byteGPS = 0;                            // Remove data
-  byteGPS = gps.read();                   // Read the byte that is in the GPS serial port
-  delay(1000);
-  while(byteGPS != '$') //find the desired string to parse
+  float timeMillis = millis();                                        Serial.println("Tag 1");
+  memset(dataGPG, 0, sizeof(dataGPG));                                Serial.println("Tag 2");                  
+  byteGPS = 0;                                                        Serial.println("Tag 3");
+  byteGPS = gps.read();                                               Serial.println("Tag 4");
+  delay(1000);                                                        Serial.println("Tag 5");
+  while(byteGPS != '$')
   {
-    byteGPS = gps.read();
-    if((int) (millis()-timeMillis) >= timeOutTime){
-      return false;
+    byteGPS = gps.read();                                             Serial.println("Tag 6");
+    if((int) (millis()-timeMillis) >= timeOutTime){                   Serial.println("Fail 1");
+      return false;                
     }
   }
-  i=1;
-  dataGPG[0] = '$';
-  while(byteGPS != '*' )
+  i=1;                                                                Serial.println("Tag 7");
+  dataGPG[0] = '$';                                                   Serial.println("Tag 8");
+  while(byteGPS != '*' )                                     
   {
     byteGPS = gps.read();
     dataGPG[i]=byteGPS; 
     i++; 
   }
-  dataGPG[i]= '\0';
-  i=0;
-  memset(GGA, 0, sizeof(GGA));          // Remove previous readings
-  pch = strtok (dataGPG,",");
+  dataGPG[i]= '\0';                                                   Serial.println("Tag 9");
+  i=0;                                                                
+  memset(GGA, 0, sizeof(GGA));                                        Serial.println("Tag 10");
+  pch = strtok (dataGPG,",");                                         Serial.println("Tag 11");
   if (strcmp(pch,"$GPRMC")==0)
-  {  
+  {                                                                  Serial.println("Got GPRMC");
     while (pch != NULL)
     {
       pch = strtok (NULL, ",");
       GGA[i]=pch;    
       i++;
     }
-  }else{
-    return false;
+  }else{                                                              Serial.println("Fail 2");
+    return false;                                                     
   }
-  float rawLat = parseDegree(GGA[2]);
+  float rawLat = parseDegree(GGA[2]);                                 Serial.println("Tag 12");
   float rawLon = parseDegree(GGA[4]);
-  if(rawLat == 0 || rawLat == 0 || *GGA[1] == 'V' ){
-  return false;
+  if(rawLat == 0 || rawLat == 0 || *GGA[1] == 'V' ){                 Serial.println("Fail 3");
+  return false;                                                      
   }
   if(*GGA[3] == 'S'){
     rawLat = -1 * rawLat;
   }
     if(*GGA[5] == 'W'){
     rawLon = -1 * rawLon;
-  }
+  }                                                                              
   //Reality Check
-  if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){return false;}
-  myLatVal = rawLat;
+  if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){Serial.println("Fail 4");return false;}
+  myLatVal = rawLat;                                                Serial.println("Tag 13");
   myLonVal = rawLon;
   return true;
 }
@@ -145,7 +175,7 @@ boolean getSerialNumber(){
    if((uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16) !=myHAddress || (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16) != myLAddress){
      return false;
    }
-   Serial.print("ATCN\r\n");
+   sendAT("ATCN\r\n", 3);
    digitalWrite(13, HIGH);
    return true;  
 }
@@ -206,13 +236,14 @@ String readXbee(int timeoutTime){
   //Serial.println(finalString);
   return finalString;
 }
+
 boolean enterAT(int maxIterations){
   do{
     maxIterations--;
     delay(1100);
     Serial.print("+++");
     delay(1000);
-    String gotString = readXbee(2000);
+    String gotString = readXbee(3000);
     if(strcmp (gotString.c_str(), "OK\r") == 0/*strlen(gotString.c_str()) > 0*/ ){
       //digitalWrite(13, HIGH);
       return true;
@@ -227,7 +258,7 @@ String sendAT(String whatToSend, int maxIterations){
   do{
     maxIterations--;
     String gotString = readXbee(2000);
-    if(strlen(gotString.c_str())>0){
+    if((strlen(gotString.c_str())>0 && !(whatToSend == "ATCN\r\n") )|| (whatToSend == "ATCN\r\n" && strcmp(gotString.c_str(), "OK\r")==0)){
       return gotString;
     }
   }while(maxIterations>0);
@@ -242,7 +273,7 @@ float distance(float Lat1, float Lon1, float Lat2, float Lon2){
 } 
 void debug(String* whatToSend){
   analogWrite(11, 8);
-  enterAT(3);
+  if(!enterAT(3)){return;}
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
@@ -252,7 +283,7 @@ void debug(String* whatToSend){
   sendAT("ATCN\r\n",3);
   Serial.println( *whatToSend);
   analogWrite(11, 8);
-  enterAT(3);
+  if(!enterAT(3)){return;} 
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
@@ -262,7 +293,7 @@ void debug(String* whatToSend){
 }
 void debug(float* whatToSend){
   analogWrite(11, 8);
-  enterAT(3);
+  if(!enterAT(3)){return;} 
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
@@ -271,7 +302,8 @@ void debug(float* whatToSend){
 
   sendAT("ATCN\r\n",3);
   Serial.println( *whatToSend);
-  analogWrite(11, 8);  enterAT(3);
+  analogWrite(11, 8);    if(!enterAT(3)){return;} 
+
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
@@ -281,7 +313,7 @@ void debug(float* whatToSend){
 }
 void debug(String* whatToSend, uint32_t Haddress, uint32_t Laddress){
   analogWrite(11, 8);
-  enterAT(3);
+  if(!enterAT(3)){return;} 
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
@@ -290,7 +322,8 @@ void debug(String* whatToSend, uint32_t Haddress, uint32_t Laddress){
 
   sendAT("ATCN\r\n",3);
   Serial.print( *whatToSend);Serial.print(" | "); Serial.print(Haddress);Serial.print(" | "); Serial.println(Laddress);
-  analogWrite(11, 8);  enterAT(3);
+  analogWrite(11, 8);    if(!enterAT(3)){return;} 
+
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
@@ -300,7 +333,7 @@ void debug(String* whatToSend, uint32_t Haddress, uint32_t Laddress){
 }
 void debug(float whatToSend){
   analogWrite(11, 8);
-  enterAT(3);
+  if(!enterAT(3)){return;} 
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
@@ -309,7 +342,57 @@ void debug(float whatToSend){
 
   sendAT("ATCN\r\n",3);
   Serial.println(whatToSend);
-  analogWrite(11, 8);  enterAT(3);
+  analogWrite(11, 8);    if(!enterAT(3)){return;} 
+
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
+  sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
+}
+void debug (struct GPSPacket* GPSIn, int realSize){
+    analogWrite(11, 8);
+  if(!enterAT(3)){return;} 
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+    digitalWrite(11, HIGH);
+
+  sendAT("ATCN\r\n",3);
+  
+  
+   Serial.print("Latitude: "); Serial.print(GPSIn->Latitude);  Serial.print("| Longitude: "); Serial.print(GPSIn->Longitude); Serial.print("| Magic Number: " ); Serial.print(GPSIn->magicNumber); Serial.print("| Source Address: ");Serial.print(GPSIn->sourceHAddress);Serial.print(".");Serial.print(GPSIn->sourceLAddress);Serial.print("| Sizeof: ");Serial.println(realSize); 
+    analogWrite(11, 8);    if(!enterAT(3)){return;} 
+
+  sendAT("ATDH" + ATDH + "\n" , 3);
+  sendAT("ATDL" + ATDL + "\n" , 3);
+  sendAT("ATDH\r\n", 3);
+  sendAT("ATDL\r\n", 3);
+  sendAT("ATCN\r\n",3);
+  digitalWrite(11, LOW);
+  
+  
+}
+void debug(char* whatToSend){
+  analogWrite(11, 8);
+  if(!enterAT(3)){return;}
+  String ATDL =  sendAT ("ATDL\r\n", 3);
+  String ATDH =  sendAT("ATDH\r\n",3);
+  sendAT("ATDH0\r\n", 3);
+  sendAT("ATDLDEB6\r\n",3);
+  digitalWrite(11, HIGH);
+
+  sendAT("ATCN\r\n",3);
+for(int i = 0; i <strlen(whatToSend); i++){
+    Serial.println((uint8_t)whatToSend[i]); 
+    
+    
+    
+  }
+  analogWrite(11, 8);
+  if(!enterAT(3)){return;} 
   sendAT("ATDH" + ATDH + "\n" , 3);
   sendAT("ATDL" + ATDL + "\n" , 3);
   sendAT("ATDH\r\n", 3);
@@ -324,7 +407,11 @@ void decodr(char* inputChar){
    Serial.println(decodingTemplate->Latitude);
    Serial.println(decodingTemplate->Longitude);
 }
-
+int freeRam () {
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
 /*Dead code (used to be in loop, now here for reference 
     if((boolean)(myLatVal * myLonVal)){ // if (Latitude != 0.0f && Longitude != 0.0f) 
     newPacket.Latitude = myLatVal;
