@@ -81,13 +81,12 @@ void loop(){
   unsigned long nowMicro = micros();
   ////////////////////////////////
   if(GPSTicker < 0 ){
-    getGPS(3000);
-    Serial.println(myLatVal);
+    getGPS(5000);
     GPSTicker = GPS_TIME; 
   }
   ////////////////////////////////
   if(debugTicker < 0){
-   debug(myLatVal);
+   //debug(myLatVal);
    debugTicker = DEBUG_TIME; 
   }
 
@@ -105,52 +104,53 @@ void loop(){
 boolean process(){
   String got = readXbee(3);
   //debug((GPSPacket*)got.c_str(), strlen(got.c_str()));
-  debug((char*)got.c_str()); 
-  
-  
+  char* thisString = (char*)got.c_str();
+  parseWrapper(thisString, sizeof(GPSPacket)-1);
+  debug((GPSPacket*)thisString, 0);
+//  debug(thisString);
   
   
   
 }
 boolean getGPS(int timeOutTime){
-  float timeMillis = millis();                                        Serial.println("Tag 1");
-  memset(dataGPG, 0, sizeof(dataGPG));                                Serial.println("Tag 2");                  
-  byteGPS = 0;                                                        Serial.println("Tag 3");
-  byteGPS = gps.read();                                               Serial.println("Tag 4");
-  delay(1000);                                                        Serial.println("Tag 5");
+  float timeMillis = millis();                                        //Serial.println("Tag 1");
+  memset(dataGPG, 0, sizeof(dataGPG));                               // Serial.println("Tag 2");                  
+  byteGPS = 0;                                                     //   Serial.println("Tag 3");
+  byteGPS = gps.read();                                             //  Serial.println("Tag 4");
+  delay(1000);                                                    //    Serial.println("Tag 5");
   while(byteGPS != '$')
   {
-    byteGPS = gps.read();                                             Serial.println("Tag 6");
-    if((int) (millis()-timeMillis) >= timeOutTime){                   Serial.println("Fail 1");
+    byteGPS = gps.read();                                        //     Serial.println("Tag 6");
+    if((int) (millis()-timeMillis) >= timeOutTime){              //     Serial.println("Fail 1");
       return false;                
     }
   }
-  i=1;                                                                Serial.println("Tag 7");
-  dataGPG[0] = '$';                                                   Serial.println("Tag 8");
+  i=1;                                                           //     Serial.println("Tag 7");
+  dataGPG[0] = '$';                                              //     Serial.println("Tag 8");
   while(byteGPS != '*' )                                     
   {
     byteGPS = gps.read();
     dataGPG[i]=byteGPS; 
     i++; 
   }
-  dataGPG[i]= '\0';                                                   Serial.println("Tag 9");
+  dataGPG[i]= '\0';                                                  // Serial.println("Tag 9");
   i=0;                                                                
-  memset(GGA, 0, sizeof(GGA));                                        Serial.println("Tag 10");
-  pch = strtok (dataGPG,",");                                         Serial.println("Tag 11");
+  memset(GGA, 0, sizeof(GGA));                                   //     Serial.println("Tag 10");
+  pch = strtok (dataGPG,",");                                    //     Serial.println("Tag 11");
   if (strcmp(pch,"$GPRMC")==0)
-  {                                                                  Serial.println("Got GPRMC");
+  {                                                            //      Serial.println("Got GPRMC");
     while (pch != NULL)
     {
       pch = strtok (NULL, ",");
       GGA[i]=pch;    
       i++;
     }
-  }else{                                                              Serial.println("Fail 2");
+  }else{                                                        //      Serial.println("Fail 2");
     return false;                                                     
   }
-  float rawLat = parseDegree(GGA[2]);                                 Serial.println("Tag 12");
+  float rawLat = parseDegree(GGA[2]);                            //     Serial.println("Tag 12");
   float rawLon = parseDegree(GGA[4]);
-  if(rawLat == 0 || rawLat == 0 || *GGA[1] == 'V' ){                 Serial.println("Fail 3");
+  if(rawLat == 0 || rawLat == 0 || *GGA[1] == 'V' ){            //     Serial.println("Fail 3");
   return false;                                                      
   }
   if(*GGA[3] == 'S'){
@@ -160,8 +160,8 @@ boolean getGPS(int timeOutTime){
     rawLon = -1 * rawLon;
   }                                                                              
   //Reality Check
-  if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){Serial.println("Fail 4");return false;}
-  myLatVal = rawLat;                                                Serial.println("Tag 13");
+  if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){/*Serial.println("Fail 4");*/return false;}
+  myLatVal = rawLat;                                              //  Serial.println("Tag 13");
   myLonVal = rawLon;
   return true;
 }
@@ -406,6 +406,18 @@ void decodr(char* inputChar){
    Serial.println(decodingTemplate->magicNumber); 
    Serial.println(decodingTemplate->Latitude);
    Serial.println(decodingTemplate->Longitude);
+}
+boolean parseWrapper(char* whatString, int sizeToProcess){  //This for receiving side
+//  if(whatString[1] != "|"){return false;}
+  char tokenValue = whatString[0];
+  for(int i = 0; i < sizeToProcess; i++){
+  whatString [i] = whatString[i+2]; 
+  if(whatString[i] == tokenValue){
+    whatString[i] = 0; 
+  }
+  }   
+  whatString[sizeToProcess] = 0;
+  
 }
 int freeRam () {
   extern int __heap_start, *__brkval; 

@@ -13,23 +13,17 @@ void setup(){
 }
 
 void loop(){
-  GPS.Latitude = 12.3456;
-GPS.Longitude=65.4321;
-GPS.magicNumber = 123123;
-GPS.sourceHAddress = 1234;
-GPS.sourceLAddress = 5678;
-  //memcpy(finalPacket, &GPS, sizeof(GPSPacket));
-  finalPacket = (char*)&GPS;
-  Serial.print(finalPacket);
-  /*for(int i = 0; i <strlen(finalPacket); i++){
-    Serial.println((uint8_t)finalPacket[i]); 
-    
-    
-    
-  }*/
-  
-  
-  delay(15000); 
+  GPS.Latitude = 40.836857;
+GPS.Longitude=-73.296373;
+GPS.magicNumber = 32343;
+GPS.sourceHAddress = 123456;
+GPS.sourceLAddress = 7890;
+
+char* payload=(char*)malloc(25);  
+payload = (char*)&GPS;
+processString(payload, sizeof(GPS));
+Serial.print(payload);
+delay(15000);
 }
 char * append_strings(const char * old, const char * newString)
 {
@@ -44,4 +38,44 @@ char * append_strings(const char * old, const char * newString)
 
     return out;
 }
- 
+char processString(char* whatString, int sizeToProcess){
+  uint8_t replacementValue = 36;
+  boolean found;
+  do{
+    found = false;
+    for(int i = 0; i < sizeToProcess; i++){
+      if((uint8_t)whatString[i] == replacementValue){
+        found = true; break;
+      }  
+    }
+    replacementValue--;
+  }while(found);
+  replacementValue++;
+  for(int i = 0; i < sizeToProcess; i++){
+    if((uint8_t)whatString[i] == 0){
+      whatString[i] = (char)replacementValue;
+    }   
+  
+  }  
+
+  whatString[sizeToProcess] = 0;
+  
+  for(int i = sizeToProcess-1; i >=0;i--){
+    whatString[i+2] = whatString[i];    
+  }
+  strncpy(whatString + 1, "|", 1);
+  memcpy(whatString, &replacementValue, 1);
+}
+
+boolean parseWrapper(char* whatString, int sizeToProcess){  //This for receiving side
+//  if(whatString[1] != "|"){return false;}
+  char tokenValue = whatString[0];
+  for(int i = 0; i < sizeToProcess; i++){
+  whatString [i] = whatString[i+2]; 
+  if(whatString[i] == tokenValue){
+    whatString[i] = 0; 
+  }
+  }   
+  whatString[sizeToProcess] = 0;
+  
+}
