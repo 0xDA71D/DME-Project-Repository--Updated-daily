@@ -42,18 +42,15 @@ typedef struct GPSPacket{  //defines a structure
 
 //Create objects ----------------
 
-GPSPacket newPacket;
-GPSPacket* receivedPacket;
-
 //Create objects ----------------
 
 //flags and timers vv
 #define GPS_TIME 60000000
-#define DEBUG_TIME 20000000
+#define SEND_OVER_TIME 20000000
 boolean GPSFlag; //true if GPS received.
 boolean mustSendFlag;
 int32_t GPSTicker = 0;
-int32_t debugTicker = 20000000;
+int32_t sendOverTicker = 20000000;
 //flags and timers ^^
 
 void setup(){
@@ -76,7 +73,6 @@ void setup(){
   sendAT("ATCN\r\n", 3);
   while(!getSerialNumber()); //keep getting until it's set; constant value for the rest of the code. 
 }
-String hey = "hey";
 void loop(){
   unsigned long nowMicro = micros();
   ////////////////////////////////
@@ -85,28 +81,48 @@ void loop(){
     GPSTicker = GPS_TIME; 
   }
   ////////////////////////////////
-  if(debugTicker < 0){
-   //debug(myLatVal);
-   debugTicker = DEBUG_TIME; 
+  if(sendOverTicker < 0){
+   sendGPSPacket();
+   sendOverTicker = SEND_OVER_TIME; 
   }
-
+//  Serial.println (sendOverTicker);
   ///////////////////////////////
   if(Serial.available()){process();}
   ///////////////////////////////
   
   uint32_t elapsedMicro = (uint32_t)(4294967295*((int)(micros()<nowMicro)) - (int32_t)nowMicro) + (int32_t)(micros());
   GPSTicker = GPSTicker - elapsedMicro;
-  debugTicker = debugTicker - elapsedMicro;
+  sendOverTicker = sendOverTicker - elapsedMicro;
 }
 //Main loop ^^
 
 //Functions to be called to do stuff vv
+void sendGPSPacket(){
+  GPSPacket GPS;
+  GPS.Latitude = myLatVal;
+  GPS.Longitude= myLonVal;
+  GPS.magicNumber = 32343;
+  GPS.sourceHAddress = myHAddress;
+  GPS.sourceLAddress = myLAddress;
+  char* whatToSend = (char*) malloc(25);
+  whatToSend = (char*)&GPS;
+  processString(whatToSend, 20);
+  debug(whatToSend);
+  char* receivedPacket = (char*) malloc(25);
+  memcpy(receivedPacket, whatToSend, 25);
+  parseWrapper(receivedPacket, 20);
+  GPSPacket* newGPS;
+  newGPS = (GPSPacket*) receivedPacket;
+  debug(newGPS, sizeof(GPSPacket));
+
+}
 boolean process(){
   String got = readXbee(3);
+  debug(&got, myHAddress, myLAddress);
   //debug((GPSPacket*)got.c_str(), strlen(got.c_str()));
-  char* thisString = (char*)got.c_str();
-  parseWrapper(thisString, sizeof(GPSPacket)-1);
-  debug((GPSPacket*)thisString, 0);
+//  char* thisString = (char*)got.c_str();
+//  parseWrapper(thisString, sizeof(GPSPacket));
+//  debug((GPSPacket*)thisString, 0);
 //  debug(thisString);
   
   
@@ -163,6 +179,7 @@ boolean getGPS(int timeOutTime){
   if(((myLatVal * myLonVal)!=0) && distance (rawLat, rawLon, myLatVal, myLonVal) > 5000 /* if moved 3 miles a minute*/){/*Serial.println("Fail 4");*/return false;}
   myLatVal = rawLat;                                              //  Serial.println("Tag 13");
   myLonVal = rawLon;
+  Serial.println(myLatVal);
   return true;
 }
 boolean getSerialNumber(){
@@ -418,6 +435,34 @@ boolean parseWrapper(char* whatString, int sizeToProcess){  //This for receiving
   }   
   whatString[sizeToProcess] = 0;
   
+}
+char processString(char* whatString, int sizeToProcess){
+  uint8_t replacementValue = 36;
+  boolean found;
+  do{
+    found = false;
+    for(int i = 0; i < sizeToProcess; i++){
+      if((uint8_t)whatString[i] == replacementValue){
+        found = true; break;
+      }  
+    }
+    replacementValue--;
+  }while(found);
+  replacementValue++;
+  for(int i = 0; i < sizeToProcess; i++){
+    if((uint8_t)whatString[i] == 0){
+      whatString[i] = (char)replacementValue;
+    }   
+  
+  }  
+
+  whatString[sizeToProcess] = 0;
+  
+  for(int i = sizeToProcess-1; i >=0;i--){
+    whatString[i+2] = whatString[i];    
+  }
+  strncpy(whatString + 1, "|", 1);
+  memcpy(whatString, &replacementValue, 1);
 }
 int freeRam () {
   extern int __heap_start, *__brkval; 

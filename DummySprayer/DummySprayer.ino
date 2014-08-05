@@ -1,4 +1,4 @@
-typedef struct GPSPacket{  //defines a structure 
+sendtypedef struct GPSPacket{  //defines a structure 
   float Latitude;
   float Longitude;
   uint32_t magicNumber;
