@@ -8,7 +8,7 @@
 //Mathematical Defines ^^
 #define txPin 8      //tx pin in GPS connection
 #define rxPin 9      //rx pin in GPS connection
-
+#define MAX_READ_XBEE 512 //TO READ MORE FROM XBEE, CHANGE THIS!
 SoftwareSerial gps = SoftwareSerial(rxPin, txPin);
 SoftwareSerial xbee = SoftwareSerial(2,3 );
 //Xbee vars ---------------------
@@ -45,16 +45,19 @@ typedef struct GPSPacket{  //defines a structure
 
 //flags and timers vv
 #define GPS_TIME 60000000
-#define SEND_OVER_TIME 20000000
+#define SEND_OVER_TIME 200000
+#define ONLIGHT 500000
 boolean GPSFlag; //true if GPS received.
 boolean mustSendFlag;
+boolean onlightFlag = false;
 int32_t GPSTicker = 0;
 int32_t sendOverTicker = 20000000;
+int32_t onlight = 500000; //Light blinking every 500ms to denote that the mote is transmitting. 
 //flags and timers ^^
 
 void setup(){
-  Serial.println("Note to human: Hardware Settings: GPS 8/9 (RX/TX); Xbee 2/3 (RX/TX) | Firmware Settings: Xbee Baud rate 19200"); 
   Serial.begin(9600);
+  Serial.println("Note to human: Hardware Settings: GPS 8/9 (RX/TX); Xbee 2/3 (RX/TX) | Firmware Settings: Xbee Baud rate 19200"); 
   Serial.flush();
   gps.begin(9600); //setup for GPS Serial Port  
   gps.flush();
@@ -78,6 +81,11 @@ void setup(){
 }
 void loop(){
   unsigned long nowMicro = micros();
+  if(onlight < 0){
+    onlightFlag = !onlightFlag; 
+    onlight= ONLIGHT;
+    if(onlightFlag){analogWrite(11, 8); }else{digitalWrite(11, LOW);}    
+  }
   ////////////////////////////////
   if(GPSTicker < 0 ){ 
     gps.listen();
@@ -92,7 +100,7 @@ void loop(){
    sendGPSPacket();
    sendOverTicker = SEND_OVER_TIME; 
   }
-  Serial.println (sendOverTicker);
+  Serial.println (onlight);
   ///////////////////////////////
   if(xbee.available()){process();}
   ///////////////////////////////
@@ -100,6 +108,7 @@ void loop(){
   uint32_t elapsedMicro = (uint32_t)(4294967295*((int)(micros()<nowMicro)) - (int32_t)nowMicro) + (int32_t)(micros());
   GPSTicker = GPSTicker - elapsedMicro;
   sendOverTicker = sendOverTicker - elapsedMicro;
+  onlight = onlight - elapsedMicro;
 }
 //Main loop ^^
 
@@ -122,23 +131,30 @@ void sendGPSPacket(){
   newGPS = (GPSPacket*) receivedPacket;
   debug(newGPS, sizeof(GPSPacket));*/
   Serial.print("Sending to other nodes this data:");Serial.println(whatToSend);Serial.print(myLatVal);Serial.print(",");Serial.print(myLonVal);Serial.print(",");Serial.print(myHAddress);Serial.print(",");Serial.println(myLAddress);
-  debug(whatToSend);
   xbee.write(whatToSend);
   digitalWrite(11, HIGH);
   delay(20);
   digitalWrite(11, LOW);
-
-
+  char* newChar = (char*)malloc(25); 
+  memcpy(newChar, whatToSend , 25);
+  parseWrapper(newChar,20);
+  GPSPacket* newGPS = (GPSPacket*) malloc(20);
+  memcpy(newGPS, newChar, 20); 
+  
+   Serial.print("Got Packet... Latitude: "); Serial.print(newGPS->Latitude);  Serial.print("| Longitude: "); Serial.print(newGPS->Longitude); Serial.print("| Magic Number: " ); Serial.print(newGPS->magicNumber); Serial.print("| Source Address: ");Serial.print(newGPS->sourceHAddress);Serial.print(".");Serial.print(newGPS->sourceLAddress);Serial.println(); 
+  free(newGPS); 
+  free(newChar);
+  
 }
 boolean process(){
-  String got = readXbee(3);
+  char* got = CreadXbee(3000);
   //debug((GPSPacket*)got.c_str(), strlen(got.c_str()));
 //  char* thisString = (char*)got.c_str();
 //  parseWrapper(thisString, sizeof(GPSPacket));
 //  debug((GPSPacket*)thisString, 0);
 //  debug(thisString);
    char* receivedPacket = (char*) malloc(25);
-   memcpy(receivedPacket, got.c_str(), 25);
+   memcpy(receivedPacket, got, 25);
    parseWrapper(receivedPacket, 20);
    GPSPacket* newGPS;
    memcpy(newGPS, receivedPacket, 20);
@@ -152,6 +168,7 @@ boolean getGPS(int timeOutTime){
   byteGPS = 0;                                                        Serial.println("Tag 3");
   byteGPS = gps.read();                                               Serial.println("Tag 4");
   delay(1000);                                                        Serial.println("Tag 5");
+  GETAGAIN: //will goto this spaghetti code, but will be later changed
   while(byteGPS != '$')
   {
     byteGPS = gps.read();                                             Serial.println("Tag 6");
@@ -180,7 +197,7 @@ boolean getGPS(int timeOutTime){
       i++;
     }
   }else{                                                             Serial.println("Fail 2");
-    return false;                                                     
+    goto GETAGAIN;//return false;                                                     
   }
   float rawLat = parseDegree(GGA[2]);                                Serial.println("Tag 12");
   float rawLon = parseDegree(GGA[4]);
@@ -204,12 +221,12 @@ boolean getGPS(int timeOutTime){
 
 boolean getSerialNumber(){
    enterAT(3);
-   myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16);
+   myHAddress = (uint32_t) strtol(sendAT("ATSH\r\n",3), NULL, 16);
    Serial.print("Got H Address "); Serial.println(myHAddress);                                          
-   myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16);
+   myLAddress = (uint32_t) strtol(sendAT("ATSL\r\n",3), NULL, 16);
    Serial.print("Got L Address "); Serial.println(myLAddress);    
    //confirmation step
-   if((uint32_t) strtol(sendAT("ATSH\r\n",3).c_str(), NULL, 16) !=myHAddress || (uint32_t) strtol(sendAT("ATSL\r\n",3).c_str(), NULL, 16) != myLAddress){
+   if((uint32_t) strtol(sendAT("ATSH\r\n",3), NULL, 16) !=myHAddress || (uint32_t) strtol(sendAT("ATSL\r\n",3), NULL, 16) != myLAddress){
      return false;
    }
    sendAT("ATCN\r\n", 3);
@@ -251,7 +268,11 @@ float parseDegree(char* inputString){
   int bigDecimal = 10000 * (numToPrint - floor(numToPrint));
   Serial.println (bigDecimal);
 }*/
-String readXbee(int timeoutTime){   
+
+
+
+//Big old read xbee now antique vvvvv  Deprecated; now use char* CreadXbee
+/*String readXbee(int timeoutTime){   
   xbee.listen();
   String finalString = "";
   float startTime = millis();
@@ -260,9 +281,7 @@ String readXbee(int timeoutTime){
       return "";
     }
   }
-  /*while (Serial.available()){
-    finalString = finalString + (char)Serial.read();
-  }*/
+
       float firstStreamTime;
 
   do{
@@ -273,6 +292,31 @@ String readXbee(int timeoutTime){
  // delay(1000);
   Serial.println(finalString);
   return finalString;
+}         */
+//^^^DEPRECATED
+
+
+char* CreadXbee(int timeoutTime){   
+  xbee.listen();
+  char xbeeOut [MAX_READ_XBEE] = ""; //#defined above
+  memset(xbeeOut, 0, sizeof(xbeeOut));  
+  float startTime = millis();
+  while (!xbee.available()) {
+    if(millis()-startTime > timeoutTime){
+      return "";
+    }
+  }
+  int howManyElem = 0;
+  while(xbee.available()){
+    xbeeOut[howManyElem] = (char) xbee.read();
+    delay(10);
+    howManyElem ++;     
+  }
+  //free(xbeeOut + howManyElem);
+  xbeeOut[howManyElem] = 0;
+ // delay(1000);
+  Serial.print(xbeeOut); Serial.print(" Got, which is this big: "); Serial.print(strlen(xbeeOut));Serial.print(" Which should be this big: "); Serial.println(    howManyElem );
+  return xbeeOut;
 }
 
 boolean enterAT(int maxIterations){
@@ -282,23 +326,25 @@ boolean enterAT(int maxIterations){
     delay(1100);
     xbee.print("+++");
     delay(1000);
-    String gotString = readXbee(3000);
-    if(strcmp (gotString.c_str(), "OK\r") == 0/*strlen(gotString.c_str()) > 0*/ ){
+    char* gotString = CreadXbee(3000);
+    if(strcmp (gotString, "OK\r") == 0/*strlen(gotString.c_str()) > 0*/ ){
       //digitalWrite(13, HIGH);
+      Serial.println("Xbee entered Command");
       return true;
+      
     }
   }
   while(maxIterations > 0 );
   return false;
 }
-String sendAT(String whatToSend, int maxIterations){
+char* sendAT(char* whatToSend, int maxIterations){
   //Serial.flush();
   xbee.flush();
   xbee.print(whatToSend);
   do{
     maxIterations--;
-    String gotString = readXbee(2000);
-    if((strlen(gotString.c_str())>0 && !(whatToSend == "ATCN\r\n") )|| (whatToSend == "ATCN\r\n" && strcmp(gotString.c_str(), "OK\r")==0)){
+    char* gotString = CreadXbee(3000);
+    if((strlen(gotString)>0 && !(whatToSend == "ATCN\r\n") )|| (whatToSend == "ATCN\r\n" && strcmp(gotString, "OK\r")==0)){
       return gotString;
     }
   }while(maxIterations>0);
@@ -311,26 +357,54 @@ float distance(float Lat1, float Lon1, float Lat2, float Lon2){
   return (earthRadius * c);
   
 } 
-void debug(String* whatToSend){
+void debug(char* whatToSend){
   analogWrite(11, 8);
+  char* ATDLwrap = (char*)malloc(14); //\n is 1 char DL is 8 chars and atdh is 4 1 just for overhead
+  ATDLwrap = "ATDL";
+  char* ATDHwrap = (char*) malloc(14);
+  ATDHwrap = "ATDH";
   if(!enterAT(3)){return;}
-  String ATDL =  sendAT ("ATDL\r\n", 3);
-  String ATDH =  sendAT("ATDH\r\n",3);
-  sendAT("ATDH0\r\n", 3);
+  char* ATDL = sendAT("ATDL\r\n",3);
+  char* ATDH = sendAT("ATDH\r\n", 3);
+  sendAT("ATDH0\r\n",3 );
   sendAT("ATDLDEB6\r\n",3);
   digitalWrite(11, HIGH);
-
-  sendAT("ATCN\r\n",3);
-  xbee.println( *whatToSend);
-  analogWrite(11, 8);
-  if(!enterAT(3)){return;} 
-  sendAT("ATDH" + ATDH + "\n" , 3);
-  sendAT("ATDL" + ATDL + "\n" , 3);
-  sendAT("ATDH\r\n", 3);
-  sendAT("ATDL\r\n", 3);
-  sendAT("ATCN\r\n",3);
+  sendAT("ATCN\r\n", 3);
+  xbee.println(whatToSend);
+  strcat(ATDLwrap, ATDL);
+  strcat(ATDLwrap, "\n");
+  strcat(ATDHwrap, ATDH);
+  strcat(ATDHwrap, "\n");
+  analogWrite(11, 8); while(!enterAT(3)){}
+  sendAT(ATDLwrap,3 );
+  sendAT(ATDHwrap,3 );
+  sendAT( "ATCN\r\n",3 );
   digitalWrite(11, LOW);
 }
+void debug(struct GPSPacket* GPSIn){
+  analogWrite(11, 8);
+  char* ATDLwrap = (char*)malloc(14); //\n is 1 char DL is 8 chars and atdh is 4 1 just for overhead
+  ATDLwrap = "ATDL";
+  char* ATDHwrap = (char*) malloc(14);
+  ATDHwrap = "ATDH";
+  if(!enterAT(3)){return;}
+  char* ATDL = sendAT("ATDL\r\n",3);
+  char* ATDH = sendAT("ATDH\r\n", 3);
+  sendAT("ATDH0\r\n",3 );
+  sendAT("ATDLDEB6\r\n",3);
+  digitalWrite(11, HIGH);
+  sendAT("ATCN\r\n", 3);
+  xbee.print("Latitude: "); xbee.print(GPSIn->Latitude);  xbee.print("| Longitude: "); xbee.print(GPSIn->Longitude); xbee.print("| Magic Number: " ); xbee.print(GPSIn->magicNumber); xbee.print("| Source Address: ");xbee.print(GPSIn->sourceHAddress);xbee.print(".");xbee.print(GPSIn->sourceLAddress);
+  strcat(ATDLwrap, "\n");
+  strcat(ATDHwrap, ATDH);
+  strcat(ATDHwrap, "\n");
+  analogWrite(11, 8); while(!enterAT(3)){}
+  sendAT(ATDLwrap,3 );
+  sendAT(ATDHwrap,3 );
+  sendAT( "ATCN\r\n",3 );
+  digitalWrite(11, LOW);
+}
+/*
 void debug(float* whatToSend){
   analogWrite(11, 8);
   if(!enterAT(3)){return;} 
@@ -421,7 +495,7 @@ void debug(char* whatToSend){
   String ATDL =  sendAT ("ATDL\r\n", 3);
   String ATDH =  sendAT("ATDH\r\n",3);
   sendAT("ATDH0\r\n", 3);
-  sendAT("ATDLDEB6\r\n",3);
+  sendAT("ATDLDEB6\r\n",3);                                   DONE WITH DEBUGS FOR NOW
   digitalWrite(11, HIGH);
 
   sendAT("ATCN\r\n",3);
@@ -439,7 +513,7 @@ for(int i = 0; i <strlen(whatToSend); i++){
   sendAT("ATDL\r\n", 3);
   sendAT("ATCN\r\n",3);
   digitalWrite(11, LOW);
-}
+}*/  
 void decodr(char* inputChar){
    GPSPacket* decodingTemplate;
    decodingTemplate = (GPSPacket*) inputChar; 
